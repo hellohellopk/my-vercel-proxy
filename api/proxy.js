@@ -16,9 +16,8 @@ export default async function handler(request, response) {
     // 2. 處理 CORS 預檢請求 (Preflight OPTIONS request)
     // 這是讓瀏覽器「跨域」的關鍵
     if (request.method === 'OPTIONS') {
-      response.status(200);
       setCorsHeaders(response);
-      response.end();
+      response.status(200).end();
       return;
     }
 
@@ -39,28 +38,9 @@ export default async function handler(request, response) {
     // 5. 將 Apple 回傳的「狀態碼」(例如 200, 404) 原封不動地回傳
     response.status(targetResponse.status);
 
-    // 6. 將 Apple 回傳的「內容」(HTML) 當作串流 (Stream) 直接回傳
-    // 這是最高效能、最快的方法
-    
-    // 將 ReadableStream (fetch的回應) 轉換為 Node.js Stream
-    // 並 pipe (導入) 到 Vercel 的 response 物件
-    if (targetResponse.body) {
-      // Vercel (Node.js) 環境的標準寫法
-      // response.send(targetResponse.body) 在 Vercel 中可能無法正確處理串流
-      // 我們需要手動 pipe
-      
-      // 將 Web Stream 轉換為 Node.js Stream
-      const readableStream = targetResponse.body;
-      const nodeStream = readableStream.pipeThrough(new TextDecoderStream());
-      
-      for await (const chunk of nodeStream) {
-        response.write(chunk);
-      }
-      response.end();
-      
-    } else {
-      response.end();
-    }
+    // 6. 將 Apple 回傳的「內容」(HTML) 直接回傳
+    const content = await targetResponse.text();
+    response.send(content);
 
   } catch (error) {
     console.error('代理請求失敗:', error);
