@@ -4,7 +4,8 @@
 
 export default async function handler(request, response) {
   // 1. 從查詢參數中獲取目標 URL
-  const { url } = request.query;
+  // 使用 request.query 來取得 URL 參數
+  const url = request.query.url;
 
   if (!url) {
     response.status(400).send('錯誤：請提供 ?url= 參數');
@@ -40,11 +41,23 @@ export default async function handler(request, response) {
 
     // 6. 將 Apple 回傳的「內容」(HTML) 當作串流 (Stream) 直接回傳
     // 這是最高效能、最快的方法
-    const readableStream = targetResponse.body;
-    if (readableStream) {
-      // Node.js 18+ 的標準寫法
-      // 將 readableStream 導入 (pipe) 到 Vercel 的 response 物件
-      readableStream.pipeTo(response);
+    
+    // 將 ReadableStream (fetch的回應) 轉換為 Node.js Stream
+    // 並 pipe (導入) 到 Vercel 的 response 物件
+    if (targetResponse.body) {
+      // Vercel (Node.js) 環境的標準寫法
+      // response.send(targetResponse.body) 在 Vercel 中可能無法正確處理串流
+      // 我們需要手動 pipe
+      
+      // 將 Web Stream 轉換為 Node.js Stream
+      const readableStream = targetResponse.body;
+      const nodeStream = readableStream.pipeThrough(new TextDecoderStream());
+      
+      for await (const chunk of nodeStream) {
+        response.write(chunk);
+      }
+      response.end();
+      
     } else {
       response.end();
     }
@@ -62,5 +75,3 @@ function setCorsHeaders(response) {
   response.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   response.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 }
-
-
